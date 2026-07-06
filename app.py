@@ -90,13 +90,13 @@ def processar_pergunta(pergunta_usuario: str) -> str:
 # APLICATIVO WEB (Flask)
 # ============================================================
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__, static_folder=".")
 
 
 @app.route("/")
 def index():
     """Serve a página principal do chat."""
-    return send_from_directory("static", "index.html")
+    return send_from_directory(".", "index.html")
 
 
 @app.route("/chat", methods=["POST"])
