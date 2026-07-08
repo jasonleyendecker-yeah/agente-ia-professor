@@ -194,7 +194,7 @@ def processar_pergunta(pergunta_usuario: str, historico: list) -> str:
 # APLICATIVO WEB (Flask)
 # ============================================================
 
-app = Flask(__name__, static_folder="static")
+app = Flask(__name__, static_folder=".")
 app.secret_key = SECRET_KEY
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 app.config["SESSION_COOKIE_SECURE"] = False  # Mudar para True com HTTPS
@@ -205,13 +205,13 @@ app.config["SESSION_COOKIE_SECURE"] = False  # Mudar para True com HTTPS
 @app.route("/")
 def index():
     """Serve a página principal."""
-    return send_from_directory("static", "index.html")
+    return send_from_directory(".", "index.html")
 
 
 @app.route("/<path:filename>")
 def static_files(filename):
     """Serve arquivos estáticos."""
-    return send_from_directory("static", filename)
+    return send_from_directory(".", filename)
 
 
 # --- Rotas de autenticação ---
