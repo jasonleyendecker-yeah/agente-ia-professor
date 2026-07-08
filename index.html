@@ -5,54 +5,275 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agente IA do Professor</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
             background-color: #1a1a2e;
             color: #eaeaea;
             height: 100vh;
-            display: flex;
-            flex-direction: column;
+            overflow: hidden;
         }
 
-        /* Header */
-        .header {
-            background-color: #16213e;
-            padding: 16px 24px;
+        /* ===== TELA DE LOGIN ===== */
+        .auth-overlay {
+            position: fixed;
+            inset: 0;
+            background: #1a1a2e;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+
+        .auth-overlay.hidden { display: none; }
+
+        .auth-box {
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 16px;
+            padding: 40px;
+            width: 100%;
+            max-width: 400px;
+            margin: 20px;
+        }
+
+        .auth-box h1 {
+            color: #e94560;
+            font-size: 24px;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+
+        .auth-box p {
+            color: #8892b0;
+            font-size: 14px;
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .auth-box .form-group {
+            margin-bottom: 16px;
+        }
+
+        .auth-box label {
+            display: block;
+            font-size: 13px;
+            color: #8892b0;
+            margin-bottom: 6px;
+        }
+
+        .auth-box input {
+            width: 100%;
+            padding: 12px 16px;
+            background: #1a1a2e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            color: #eaeaea;
+            font-size: 15px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .auth-box input:focus { border-color: #e94560; }
+
+        .auth-box .btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #e94560, #533483);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: opacity 0.2s;
+        }
+
+        .auth-box .btn:hover { opacity: 0.9; }
+        .auth-box .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .auth-box .switch-link {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #8892b0;
+        }
+
+        .auth-box .switch-link a {
+            color: #e94560;
+            cursor: pointer;
+            text-decoration: none;
+        }
+
+        .auth-error {
+            background: rgba(233, 69, 96, 0.1);
+            border: 1px solid #e94560;
+            border-radius: 8px;
+            padding: 10px 14px;
+            font-size: 13px;
+            color: #e94560;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .auth-error.visible { display: block; }
+
+        /* ===== LAYOUT PRINCIPAL ===== */
+        .app-container {
+            display: flex;
+            height: 100vh;
+        }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 280px;
+            background: #16213e;
+            border-right: 1px solid #0f3460;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s;
+        }
+
+        .sidebar-header {
+            padding: 16px;
             border-bottom: 1px solid #0f3460;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .sidebar-header h2 {
+            font-size: 15px;
+            color: #eaeaea;
+        }
+
+        .btn-new-chat {
+            background: linear-gradient(135deg, #e94560, #533483);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 14px;
+            color: white;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-new-chat:hover { opacity: 0.85; }
+
+        .conversations-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 8px;
+        }
+
+        .conv-item {
+            padding: 12px 14px;
+            border-radius: 8px;
+            cursor: pointer;
+            margin-bottom: 4px;
+            transition: background 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .conv-item:hover { background: rgba(15, 52, 96, 0.5); }
+        .conv-item.active { background: #0f3460; }
+
+        .conv-item-title {
+            font-size: 13px;
+            color: #ccd6f6;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex: 1;
+        }
+
+        .conv-item-delete {
+            opacity: 0;
+            background: none;
+            border: none;
+            color: #e94560;
+            cursor: pointer;
+            font-size: 16px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            transition: opacity 0.2s;
+        }
+
+        .conv-item:hover .conv-item-delete { opacity: 1; }
+
+        .sidebar-footer {
+            padding: 12px 16px;
+            border-top: 1px solid #0f3460;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .user-info {
+            font-size: 13px;
+            color: #8892b0;
+        }
+
+        .user-info strong {
+            color: #ccd6f6;
+        }
+
+        .btn-logout {
+            background: none;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            padding: 6px 12px;
+            color: #8892b0;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-logout:hover {
+            border-color: #e94560;
+            color: #e94560;
+        }
+
+        /* ===== ÁREA PRINCIPAL DO CHAT ===== */
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .chat-header {
+            padding: 14px 24px;
+            border-bottom: 1px solid #0f3460;
+            background: #16213e;
             display: flex;
             align-items: center;
             gap: 12px;
         }
 
-        .header-icon {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, #0f3460, #533483);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 20px;
+        .btn-menu-mobile {
+            display: none;
+            background: none;
+            border: none;
+            color: #eaeaea;
+            font-size: 22px;
+            cursor: pointer;
         }
 
-        .header-info h1 {
-            font-size: 18px;
+        .chat-header-title {
+            font-size: 16px;
             font-weight: 600;
-            color: #e94560;
+            color: #eaeaea;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        .header-info p {
-            font-size: 12px;
-            color: #8892b0;
-        }
-
-        /* Chat Area */
         .chat-container {
             flex: 1;
             overflow-y: auto;
@@ -63,73 +284,60 @@
         }
 
         .message {
-            max-width: 80%;
+            max-width: 75%;
             padding: 14px 18px;
             border-radius: 16px;
-            line-height: 1.6;
+            line-height: 1.7;
             font-size: 15px;
             animation: fadeIn 0.3s ease;
         }
 
         @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
+            from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
         }
 
         .message-user {
             align-self: flex-end;
-            background-color: #0f3460;
+            background: linear-gradient(135deg, #0f3460, #1a3a5c);
             color: #eaeaea;
             border-bottom-right-radius: 4px;
         }
 
         .message-agent {
             align-self: flex-start;
-            background-color: #16213e;
+            background: #1e2a4a;
             color: #eaeaea;
-            border: 1px solid #0f3460;
+            border: 1px solid #2a3a5a;
             border-bottom-left-radius: 4px;
         }
 
-        .message-agent p {
-            margin-bottom: 8px;
-        }
+        .message-agent p { margin-bottom: 10px; }
+        .message-agent p:last-child { margin-bottom: 0; }
+        .message-agent strong { color: #e94560; }
+        .message-agent em { color: #8892b0; font-style: italic; }
 
-        .message-agent p:last-child {
-            margin-bottom: 0;
-        }
-
-        /* Typing indicator */
         .typing-indicator {
             align-self: flex-start;
-            background-color: #16213e;
-            border: 1px solid #0f3460;
+            background: #1e2a4a;
+            border: 1px solid #2a3a5a;
             padding: 14px 18px;
             border-radius: 16px;
             border-bottom-left-radius: 4px;
             display: none;
-        }
-
-        .typing-indicator.active {
-            display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
         }
 
-        .typing-indicator span {
-            font-size: 13px;
-            color: #8892b0;
-        }
+        .typing-indicator.active { display: flex; }
 
-        .typing-dots {
-            display: flex;
-            gap: 4px;
-        }
+        .typing-indicator span { font-size: 13px; color: #8892b0; }
+
+        .typing-dots { display: flex; gap: 4px; }
 
         .typing-dots div {
-            width: 8px;
-            height: 8px;
-            background-color: #e94560;
+            width: 8px; height: 8px;
+            background: #e94560;
             border-radius: 50%;
             animation: bounce 1.4s infinite ease-in-out;
         }
@@ -143,9 +351,29 @@
             40% { transform: scale(1); opacity: 1; }
         }
 
-        /* Input Area */
+        /* Welcome */
+        .welcome {
+            text-align: center;
+            padding: 60px 20px;
+            color: #8892b0;
+        }
+
+        .welcome h2 {
+            color: #e94560;
+            margin-bottom: 12px;
+            font-size: 24px;
+        }
+
+        .welcome p {
+            font-size: 15px;
+            line-height: 1.8;
+            max-width: 480px;
+            margin: 0 auto;
+        }
+
+        /* Input */
         .input-container {
-            background-color: #16213e;
+            background: #16213e;
             padding: 16px 24px;
             border-top: 1px solid #0f3460;
             display: flex;
@@ -155,7 +383,7 @@
 
         .input-container textarea {
             flex: 1;
-            background-color: #1a1a2e;
+            background: #1a1a2e;
             border: 1px solid #0f3460;
             border-radius: 12px;
             padding: 12px 16px;
@@ -169,161 +397,379 @@
             transition: border-color 0.2s;
         }
 
-        .input-container textarea:focus {
-            border-color: #e94560;
-        }
-
-        .input-container textarea::placeholder {
-            color: #5a6080;
-        }
+        .input-container textarea:focus { border-color: #e94560; }
+        .input-container textarea::placeholder { color: #5a6080; }
 
         .send-button {
             background: linear-gradient(135deg, #e94560, #533483);
             border: none;
             border-radius: 12px;
-            width: 46px;
-            height: 46px;
+            width: 46px; height: 46px;
             cursor: pointer;
             display: flex;
             align-items: center;
             justify-content: center;
             transition: transform 0.2s, opacity 0.2s;
+            flex-shrink: 0;
         }
 
-        .send-button:hover {
-            transform: scale(1.05);
-        }
+        .send-button:hover { transform: scale(1.05); }
+        .send-button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+        .send-button svg { width: 20px; height: 20px; fill: white; }
 
-        .send-button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
-
-        .send-button svg {
-            width: 20px;
-            height: 20px;
-            fill: white;
-        }
-
-        /* Welcome message */
-        .welcome {
-            text-align: center;
-            padding: 40px 20px;
-            color: #8892b0;
-        }
-
-        .welcome h2 {
-            color: #e94560;
-            margin-bottom: 12px;
-            font-size: 22px;
-        }
-
-        .welcome p {
-            font-size: 14px;
-            line-height: 1.8;
-            max-width: 500px;
-            margin: 0 auto;
-        }
-
-        /* Responsive */
-        @media (max-width: 600px) {
-            .message {
-                max-width: 90%;
+        /* ===== RESPONSIVO ===== */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0; top: 0; bottom: 0;
+                z-index: 100;
+                transform: translateX(-100%);
             }
-            .header {
-                padding: 12px 16px;
+            .sidebar.open { transform: translateX(0); }
+            .btn-menu-mobile { display: block; }
+            .sidebar-overlay {
+                position: fixed;
+                inset: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 99;
+                display: none;
             }
-            .chat-container {
-                padding: 16px;
-            }
-            .input-container {
-                padding: 12px 16px;
-            }
+            .sidebar-overlay.active { display: block; }
+            .message { max-width: 90%; }
         }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <div class="header">
-        <div class="header-icon">&#129302;</div>
-        <div class="header-info">
-            <h1>Agente IA do Professor</h1>
-            <p>Assistente Educacional com Verificador de Qualidade</p>
+    <!-- OVERLAY LOGIN/REGISTRO -->
+    <div class="auth-overlay" id="authOverlay">
+        <div class="auth-box" id="authBox">
+            <!-- Login Form -->
+            <div id="loginForm">
+                <h1>Agente IA do Professor</h1>
+                <p>Faça login para acessar suas conversas</p>
+                <div class="auth-error" id="loginError"></div>
+                <div class="form-group">
+                    <label for="loginUser">Usuário</label>
+                    <input type="text" id="loginUser" placeholder="Seu nome de usuário" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="loginPass">Senha</label>
+                    <input type="password" id="loginPass" placeholder="Sua senha" autocomplete="current-password">
+                </div>
+                <button class="btn" id="btnLogin" onclick="fazerLogin()">Entrar</button>
+                <div class="switch-link">
+                    Não tem conta? <a onclick="mostrarRegistro()">Criar conta</a>
+                </div>
+            </div>
+
+            <!-- Register Form -->
+            <div id="registerForm" style="display:none;">
+                <h1>Criar Conta</h1>
+                <p>Registre-se para começar a usar o Agente IA</p>
+                <div class="auth-error" id="registerError"></div>
+                <div class="form-group">
+                    <label for="regNome">Seu nome</label>
+                    <input type="text" id="regNome" placeholder="Como quer ser chamado">
+                </div>
+                <div class="form-group">
+                    <label for="regUser">Usuário</label>
+                    <input type="text" id="regUser" placeholder="Escolha um nome de usuário" autocomplete="username">
+                </div>
+                <div class="form-group">
+                    <label for="regPass">Senha</label>
+                    <input type="password" id="regPass" placeholder="Escolha uma senha" autocomplete="new-password">
+                </div>
+                <button class="btn" id="btnRegister" onclick="fazerRegistro()">Criar conta</button>
+                <div class="switch-link">
+                    Já tem conta? <a onclick="mostrarLogin()">Fazer login</a>
+                </div>
+            </div>
         </div>
     </div>
 
-    <!-- Chat Area -->
-    <div class="chat-container" id="chatContainer">
-        <div class="welcome">
-            <h2>Bem-vindo!</h2>
-            <p>
-                Sou o Agente IA do Professor. Posso ajudar com perguntas sobre qualquer assunto.
-                Todas as minhas respostas passam por um revisor de qualidade antes de chegar a você,
-                para garantir que nenhuma informação inventada seja entregue.
-            </p>
-        </div>
-    </div>
+    <!-- OVERLAY SIDEBAR MOBILE -->
+    <div class="sidebar-overlay" id="sidebarOverlay" onclick="fecharSidebar()"></div>
 
-    <!-- Typing Indicator -->
-    <div class="typing-indicator" id="typingIndicator">
-        <div class="typing-dots">
-            <div></div>
-            <div></div>
-            <div></div>
-        </div>
-        <span>Pensando e verificando a resposta...</span>
-    </div>
+    <!-- APP PRINCIPAL -->
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2>Conversas</h2>
+                <button class="btn-new-chat" onclick="novaConversa()">+ Nova</button>
+            </div>
+            <div class="conversations-list" id="convList"></div>
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <strong id="userDisplayName">-</strong>
+                </div>
+                <button class="btn-logout" onclick="fazerLogout()">Sair</button>
+            </div>
+        </aside>
 
-    <!-- Input Area -->
-    <div class="input-container">
-        <textarea
-            id="inputMessage"
-            placeholder="Digite sua pergunta aqui..."
-            rows="1"
-            onkeydown="handleKeyDown(event)"
-        ></textarea>
-        <button class="send-button" id="sendButton" onclick="enviarMensagem()">
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
-            </svg>
-        </button>
+        <!-- Main -->
+        <main class="main-area">
+            <div class="chat-header">
+                <button class="btn-menu-mobile" onclick="abrirSidebar()">&#9776;</button>
+                <span class="chat-header-title" id="chatTitle">Selecione ou crie uma conversa</span>
+            </div>
+
+            <div class="chat-container" id="chatContainer">
+                <div class="welcome" id="welcomeMsg">
+                    <h2>Bem-vindo!</h2>
+                    <p>Clique em "+ Nova" para iniciar uma conversa, ou selecione uma conversa existente na barra lateral.</p>
+                </div>
+            </div>
+
+            <div class="typing-indicator" id="typingIndicator">
+                <div class="typing-dots"><div></div><div></div><div></div></div>
+                <span>Pensando...</span>
+            </div>
+
+            <div class="input-container">
+                <textarea id="inputMessage" placeholder="Digite sua mensagem..." rows="1" onkeydown="handleKeyDown(event)" disabled></textarea>
+                <button class="send-button" id="sendButton" onclick="enviarMensagem()" disabled>
+                    <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                </button>
+            </div>
+        </main>
     </div>
 
     <script>
-        const chatContainer = document.getElementById('chatContainer');
-        const inputMessage = document.getElementById('inputMessage');
-        const sendButton = document.getElementById('sendButton');
-        const typingIndicator = document.getElementById('typingIndicator');
+        // ===== ESTADO =====
+        let currentConvId = null;
+        let userName = "";
 
-        // Auto-resize textarea
-        inputMessage.addEventListener('input', function() {
-            this.style.height = 'auto';
-            this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+        // ===== ELEMENTOS =====
+        const authOverlay = document.getElementById("authOverlay");
+        const chatContainer = document.getElementById("chatContainer");
+        const inputMessage = document.getElementById("inputMessage");
+        const sendButton = document.getElementById("sendButton");
+        const typingIndicator = document.getElementById("typingIndicator");
+        const convList = document.getElementById("convList");
+        const chatTitle = document.getElementById("chatTitle");
+        const welcomeMsg = document.getElementById("welcomeMsg");
+
+        // ===== INICIALIZAÇÃO =====
+        document.addEventListener("DOMContentLoaded", verificarLogin);
+
+        async function verificarLogin() {
+            try {
+                const res = await fetch("/api/me");
+                const data = await res.json();
+                if (data.logado) {
+                    userName = data.nome;
+                    entrarNoApp();
+                }
+            } catch (e) {}
+        }
+
+        function entrarNoApp() {
+            authOverlay.classList.add("hidden");
+            document.getElementById("userDisplayName").textContent = userName;
+            carregarConversas();
+        }
+
+        // ===== AUTENTICAÇÃO =====
+        function mostrarLogin() {
+            document.getElementById("loginForm").style.display = "block";
+            document.getElementById("registerForm").style.display = "none";
+        }
+
+        function mostrarRegistro() {
+            document.getElementById("loginForm").style.display = "none";
+            document.getElementById("registerForm").style.display = "block";
+        }
+
+        async function fazerLogin() {
+            const username = document.getElementById("loginUser").value.trim();
+            const password = document.getElementById("loginPass").value.trim();
+            const errorEl = document.getElementById("loginError");
+
+            if (!username || !password) {
+                errorEl.textContent = "Preencha todos os campos.";
+                errorEl.classList.add("visible");
+                return;
+            }
+
+            document.getElementById("btnLogin").disabled = true;
+
+            try {
+                const res = await fetch("/api/login", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({username, password})
+                });
+                const data = await res.json();
+
+                if (data.sucesso) {
+                    userName = data.nome;
+                    errorEl.classList.remove("visible");
+                    entrarNoApp();
+                } else {
+                    errorEl.textContent = data.erro;
+                    errorEl.classList.add("visible");
+                }
+            } catch (e) {
+                errorEl.textContent = "Erro de conexão. Tente novamente.";
+                errorEl.classList.add("visible");
+            }
+            document.getElementById("btnLogin").disabled = false;
+        }
+
+        async function fazerRegistro() {
+            const nome = document.getElementById("regNome").value.trim();
+            const username = document.getElementById("regUser").value.trim();
+            const password = document.getElementById("regPass").value.trim();
+            const errorEl = document.getElementById("registerError");
+
+            if (!username || !password) {
+                errorEl.textContent = "Usuário e senha são obrigatórios.";
+                errorEl.classList.add("visible");
+                return;
+            }
+
+            document.getElementById("btnRegister").disabled = true;
+
+            try {
+                const res = await fetch("/api/register", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({username, password, nome})
+                });
+                const data = await res.json();
+
+                if (data.sucesso) {
+                    userName = data.nome;
+                    errorEl.classList.remove("visible");
+                    entrarNoApp();
+                } else {
+                    errorEl.textContent = data.erro;
+                    errorEl.classList.add("visible");
+                }
+            } catch (e) {
+                errorEl.textContent = "Erro de conexão. Tente novamente.";
+                errorEl.classList.add("visible");
+            }
+            document.getElementById("btnRegister").disabled = false;
+        }
+
+        async function fazerLogout() {
+            await fetch("/api/logout", {method: "POST"});
+            currentConvId = null;
+            authOverlay.classList.remove("hidden");
+            chatContainer.innerHTML = "";
+            convList.innerHTML = "";
+            inputMessage.disabled = true;
+            sendButton.disabled = true;
+        }
+
+        // Enter para login/registro
+        document.getElementById("loginPass").addEventListener("keydown", e => {
+            if (e.key === "Enter") fazerLogin();
+        });
+        document.getElementById("regPass").addEventListener("keydown", e => {
+            if (e.key === "Enter") fazerRegistro();
         });
 
+        // ===== CONVERSAS =====
+        async function carregarConversas() {
+            try {
+                const res = await fetch("/api/conversations");
+                const conversas = await res.json();
+                renderizarListaConversas(conversas);
+            } catch (e) {}
+        }
+
+        function renderizarListaConversas(conversas) {
+            convList.innerHTML = "";
+            conversas.forEach(conv => {
+                const div = document.createElement("div");
+                div.className = `conv-item${conv.id === currentConvId ? " active" : ""}`;
+                div.innerHTML = `
+                    <span class="conv-item-title">${escapeHtml(conv.titulo)}</span>
+                    <button class="conv-item-delete" onclick="event.stopPropagation(); excluirConversa('${conv.id}')" title="Excluir">&times;</button>
+                `;
+                div.onclick = () => abrirConversa(conv.id, conv.titulo);
+                convList.appendChild(div);
+            });
+        }
+
+        async function novaConversa() {
+            try {
+                const res = await fetch("/api/conversations", {method: "POST"});
+                const conv = await res.json();
+                currentConvId = conv.id;
+                chatTitle.textContent = "Nova conversa";
+                chatContainer.innerHTML = "";
+                if (welcomeMsg) welcomeMsg.remove();
+                inputMessage.disabled = false;
+                sendButton.disabled = false;
+                inputMessage.focus();
+                carregarConversas();
+                fecharSidebar();
+            } catch (e) {}
+        }
+
+        async function abrirConversa(convId, titulo) {
+            currentConvId = convId;
+            chatTitle.textContent = titulo;
+            inputMessage.disabled = false;
+            sendButton.disabled = false;
+
+            try {
+                const res = await fetch(`/api/conversations/${convId}`);
+                const conv = await res.json();
+                chatContainer.innerHTML = "";
+
+                conv.mensagens.forEach(msg => {
+                    adicionarMensagem(msg.texto, msg.tipo === "user" ? "user" : "agent");
+                });
+
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                carregarConversas();
+                fecharSidebar();
+                inputMessage.focus();
+            } catch (e) {}
+        }
+
+        async function excluirConversa(convId) {
+            if (!confirm("Excluir esta conversa?")) return;
+            try {
+                await fetch(`/api/conversations/${convId}`, {method: "DELETE"});
+                if (currentConvId === convId) {
+                    currentConvId = null;
+                    chatContainer.innerHTML = `<div class="welcome"><h2>Bem-vindo!</h2><p>Clique em "+ Nova" para iniciar uma conversa.</p></div>`;
+                    chatTitle.textContent = "Selecione ou crie uma conversa";
+                    inputMessage.disabled = true;
+                    sendButton.disabled = true;
+                }
+                carregarConversas();
+            } catch (e) {}
+        }
+
+        // ===== CHAT =====
         function handleKeyDown(event) {
-            if (event.key === 'Enter' && !event.shiftKey) {
+            if (event.key === "Enter" && !event.shiftKey) {
                 event.preventDefault();
                 enviarMensagem();
             }
         }
 
-        function adicionarMensagem(texto, tipo) {
-            // Remove welcome message if present
-            const welcome = chatContainer.querySelector('.welcome');
-            if (welcome) welcome.remove();
+        inputMessage.addEventListener("input", function() {
+            this.style.height = "auto";
+            this.style.height = Math.min(this.scrollHeight, 120) + "px";
+        });
 
-            const div = document.createElement('div');
+        function adicionarMensagem(texto, tipo) {
+            const div = document.createElement("div");
             div.className = `message message-${tipo}`;
 
-            // Simple markdown-like formatting for agent messages
-            if (tipo === 'agent') {
-                // Convert **bold** to <strong>
-                texto = texto.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                // Convert line breaks to paragraphs
-                const paragraphs = texto.split('\n\n');
-                div.innerHTML = paragraphs.map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+            if (tipo === "agent") {
+                texto = texto.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>");
+                texto = texto.replace(/\*(.*?)\*/g, "<em>$1</em>");
+                const paragraphs = texto.split("\n\n");
+                div.innerHTML = paragraphs.map(p => `<p>${p.replace(/\n/g, "<br>")}</p>`).join("");
             } else {
                 div.textContent = texto;
             }
@@ -333,51 +779,64 @@
         }
 
         function mostrarDigitando(mostrar) {
-            typingIndicator.className = mostrar ? 'typing-indicator active' : 'typing-indicator';
-            if (mostrar) {
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            }
+            typingIndicator.className = mostrar ? "typing-indicator active" : "typing-indicator";
+            if (mostrar) chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
         async function enviarMensagem() {
             const pergunta = inputMessage.value.trim();
-            if (!pergunta) return;
+            if (!pergunta || !currentConvId) return;
 
-            // Disable input
-            inputMessage.value = '';
-            inputMessage.style.height = 'auto';
+            inputMessage.value = "";
+            inputMessage.style.height = "auto";
             sendButton.disabled = true;
+            inputMessage.disabled = true;
 
-            // Show user message
-            adicionarMensagem(pergunta, 'user');
-
-            // Show typing indicator
+            adicionarMensagem(pergunta, "user");
             mostrarDigitando(true);
 
             try {
-                const response = await fetch('/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ pergunta: pergunta })
+                const res = await fetch("/api/chat", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({pergunta, conversa_id: currentConvId})
                 });
-
-                const data = await response.json();
-
+                const data = await res.json();
                 mostrarDigitando(false);
 
                 if (data.resposta) {
-                    adicionarMensagem(data.resposta, 'agent');
+                    adicionarMensagem(data.resposta, "agent");
+                    // Atualizar título na sidebar se mudou
+                    carregarConversas();
                 } else if (data.erro) {
-                    adicionarMensagem(`Desculpe, ocorreu um erro: ${data.erro}`, 'agent');
+                    adicionarMensagem(`Desculpe, ocorreu um erro: ${data.erro}`, "agent");
                 }
             } catch (error) {
                 mostrarDigitando(false);
-                adicionarMensagem('Desculpe, não consegui me conectar ao servidor. Tente novamente.', 'agent');
+                adicionarMensagem("Desculpe, não consegui me conectar ao servidor. Tente novamente.", "agent");
             }
 
-            // Re-enable input
             sendButton.disabled = false;
+            inputMessage.disabled = false;
             inputMessage.focus();
+        }
+
+        // ===== SIDEBAR MOBILE =====
+        function abrirSidebar() {
+            document.getElementById("sidebar").classList.add("open");
+            document.getElementById("sidebarOverlay").classList.add("active");
+        }
+
+        function fecharSidebar() {
+            document.getElementById("sidebar").classList.remove("open");
+            document.getElementById("sidebarOverlay").classList.remove("active");
+        }
+
+        // ===== UTILS =====
+        function escapeHtml(text) {
+            const div = document.createElement("div");
+            div.textContent = text;
+            return div.innerHTML;
         }
     </script>
 </body>
