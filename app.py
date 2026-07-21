@@ -1,10 +1,11 @@
 """
-Agente IA do Professor - Versão 2.0
+Agente IA do Professor - Versão 2.1
 - Autenticação com login/registro
-- Histórico de conversas salvas
+- Histórico de conversas salvas (PostgreSQL - Neon)
 - Memória de contexto (lembra o que foi dito)
 - Tom natural e humano
 - Revisor de qualidade
+- Dados persistentes (não perde ao reiniciar)
 """
 
 import os
@@ -15,6 +16,8 @@ from datetime import datetime
 from functools import wraps
 from flask import Flask, request, jsonify, send_from_directory, session
 from groq import Groq
+import psycopg2
+from psycopg2.extras import RealDictCursor
 
 # ============================================================
 # CONFIGURAÇÃO
@@ -24,34 +27,58 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 client = Groq(api_key=GROQ_API_KEY)
 MODEL = "openai/gpt-oss-120b"
 SECRET_KEY = os.environ.get("SECRET_KEY", secrets.token_hex(32))
-
-# Banco de dados simples com JSON (para o plano gratuito do Render)
-# Em produção futura, migrar para PostgreSQL
-DATA_DIR = os.environ.get("DATA_DIR", "/tmp/agente_data")
-os.makedirs(DATA_DIR, exist_ok=True)
-
-USERS_FILE = os.path.join(DATA_DIR, "users.json")
-CONVERSATIONS_DIR = os.path.join(DATA_DIR, "conversations")
-os.makedirs(CONVERSATIONS_DIR, exist_ok=True)
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
 
 
 # ============================================================
-# FUNÇÕES DE BANCO DE DADOS (JSON)
+# BANCO DE DADOS (PostgreSQL via Neon)
 # ============================================================
 
-def load_users():
-    """Carrega os usuários do arquivo JSON."""
-    if os.path.exists(USERS_FILE):
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return {}
+def get_db():
+    """Retorna uma conexão com o banco de dados."""
+    conn = psycopg2.connect(DATABASE_URL, cursor_factory=RealDictCursor)
+    return conn
 
 
-def save_users(users):
-    """Salva os usuários no arquivo JSON."""
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(users, f, ensure_ascii=False, indent=2)
+def init_db():
+    """Cria as tabelas se não existirem."""
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username VARCHAR(100) UNIQUE NOT NULL,
+            password_hash VARCHAR(200) NOT NULL,
+            nome VARCHAR(200) NOT NULL,
+            criado_em TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS conversations (
+            id VARCHAR(20) PRIMARY KEY,
+            username VARCHAR(100) NOT NULL REFERENCES users(username),
+            titulo VARCHAR(200) NOT NULL DEFAULT 'Nova conversa',
+            criada_em TIMESTAMP DEFAULT NOW(),
+            atualizada_em TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS messages (
+            id SERIAL PRIMARY KEY,
+            conversa_id VARCHAR(20) NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+            tipo VARCHAR(10) NOT NULL,
+            texto TEXT NOT NULL,
+            timestamp TIMESTAMP DEFAULT NOW()
+        )
+    """)
+    conn.commit()
+    cur.close()
+    conn.close()
 
+
+# ============================================================
+# FUNÇÕES DE BANCO DE DADOS
+# ============================================================
 
 def hash_password(password):
     """Gera hash seguro da senha."""
@@ -64,28 +91,6 @@ def verify_password(stored_hash, password):
     """Verifica se a senha confere com o hash armazenado."""
     salt, hashed = stored_hash.split(":")
     return hashlib.sha256((salt + password).encode()).hexdigest() == hashed
-
-
-def get_user_conversations_file(username):
-    """Retorna o caminho do arquivo de conversas do usuário."""
-    safe_name = hashlib.md5(username.encode()).hexdigest()
-    return os.path.join(CONVERSATIONS_DIR, f"{safe_name}.json")
-
-
-def load_conversations(username):
-    """Carrega as conversas de um usuário."""
-    filepath = get_user_conversations_file(username)
-    if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return []
-
-
-def save_conversations(username, conversations):
-    """Salva as conversas de um usuário."""
-    filepath = get_user_conversations_file(username)
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(conversations, f, ensure_ascii=False, indent=2)
 
 
 # ============================================================
@@ -155,8 +160,8 @@ def processar_pergunta(pergunta_usuario: str, historico: list) -> str:
     # Montar mensagens com contexto (últimas 10 mensagens para não estourar tokens)
     mensagens = [{"role": "system", "content": PROMPT_ASSISTENTE}]
 
-    # Adicionar histórico recente (últimas 10 trocas)
-    historico_recente = historico[-20:]  # 20 mensagens = 10 trocas (user + assistant)
+    # Adicionar histórico recente (últimas 20 mensagens = 10 trocas user + assistant)
+    historico_recente = historico[-20:]
     for msg in historico_recente:
         mensagens.append({
             "role": msg["role"],
@@ -197,7 +202,7 @@ def processar_pergunta(pergunta_usuario: str, historico: list) -> str:
 app = Flask(__name__, static_folder=".")
 app.secret_key = SECRET_KEY
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = False  # Mudar para True com HTTPS
+app.config["SESSION_COOKIE_SECURE"] = False
 
 
 # --- Rotas de páginas ---
@@ -233,22 +238,30 @@ def register():
     if len(password) < 4:
         return jsonify({"erro": "Senha deve ter pelo menos 4 caracteres."}), 400
 
-    users = load_users()
+    conn = get_db()
+    cur = conn.cursor()
 
-    if username in users:
-        return jsonify({"erro": "Este usuário já existe. Escolha outro."}), 409
+    try:
+        cur.execute("SELECT username FROM users WHERE username = %s", (username,))
+        if cur.fetchone():
+            return jsonify({"erro": "Este usuário já existe. Escolha outro."}), 409
 
-    users[username] = {
-        "password_hash": hash_password(password),
-        "nome": nome or username,
-        "criado_em": datetime.now().isoformat(),
-    }
-    save_users(users)
+        cur.execute(
+            "INSERT INTO users (username, password_hash, nome) VALUES (%s, %s, %s)",
+            (username, hash_password(password), nome or username)
+        )
+        conn.commit()
 
-    session["username"] = username
-    session["nome"] = nome or username
+        session["username"] = username
+        session["nome"] = nome or username
 
-    return jsonify({"sucesso": True, "nome": nome or username})
+        return jsonify({"sucesso": True, "nome": nome or username})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"erro": f"Erro ao registrar: {str(e)}"}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/api/login", methods=["POST"])
@@ -261,18 +274,26 @@ def login():
     if not username or not password:
         return jsonify({"erro": "Usuário e senha são obrigatórios."}), 400
 
-    users = load_users()
+    conn = get_db()
+    cur = conn.cursor()
 
-    if username not in users:
-        return jsonify({"erro": "Usuário ou senha incorretos."}), 401
+    try:
+        cur.execute("SELECT username, password_hash, nome FROM users WHERE username = %s", (username,))
+        user = cur.fetchone()
 
-    if not verify_password(users[username]["password_hash"], password):
-        return jsonify({"erro": "Usuário ou senha incorretos."}), 401
+        if not user:
+            return jsonify({"erro": "Usuário ou senha incorretos."}), 401
 
-    session["username"] = username
-    session["nome"] = users[username]["nome"]
+        if not verify_password(user["password_hash"], password):
+            return jsonify({"erro": "Usuário ou senha incorretos."}), 401
 
-    return jsonify({"sucesso": True, "nome": users[username]["nome"]})
+        session["username"] = username
+        session["nome"] = user["nome"]
+
+        return jsonify({"sucesso": True, "nome": user["nome"]})
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/api/logout", methods=["POST"])
@@ -300,59 +321,113 @@ def me():
 @login_required
 def list_conversations():
     """Lista todas as conversas do usuário."""
-    conversations = load_conversations(session["username"])
-    # Retorna resumo (sem mensagens completas)
-    resumo = []
-    for conv in conversations:
-        resumo.append({
-            "id": conv["id"],
-            "titulo": conv["titulo"],
-            "criada_em": conv["criada_em"],
-            "atualizada_em": conv.get("atualizada_em", conv["criada_em"]),
-            "mensagens_count": len(conv["mensagens"])
-        })
-    # Ordenar por mais recente
-    resumo.sort(key=lambda x: x["atualizada_em"], reverse=True)
-    return jsonify(resumo)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("""
+            SELECT c.id, c.titulo, c.criada_em, c.atualizada_em,
+                   COUNT(m.id) as mensagens_count
+            FROM conversations c
+            LEFT JOIN messages m ON m.conversa_id = c.id
+            WHERE c.username = %s
+            GROUP BY c.id
+            ORDER BY c.atualizada_em DESC
+        """, (session["username"],))
+        conversas = cur.fetchall()
+        # Converter datetime para string
+        resultado = []
+        for conv in conversas:
+            resultado.append({
+                "id": conv["id"],
+                "titulo": conv["titulo"],
+                "criada_em": conv["criada_em"].isoformat() if conv["criada_em"] else "",
+                "atualizada_em": conv["atualizada_em"].isoformat() if conv["atualizada_em"] else "",
+                "mensagens_count": conv["mensagens_count"]
+            })
+        return jsonify(resultado)
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/api/conversations", methods=["POST"])
 @login_required
 def create_conversation():
     """Cria uma nova conversa."""
-    conversations = load_conversations(session["username"])
-    nova_id = secrets.token_hex(8)
-    nova_conversa = {
-        "id": nova_id,
-        "titulo": "Nova conversa",
-        "criada_em": datetime.now().isoformat(),
-        "atualizada_em": datetime.now().isoformat(),
-        "mensagens": []
-    }
-    conversations.append(nova_conversa)
-    save_conversations(session["username"], conversations)
-    return jsonify(nova_conversa)
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        nova_id = secrets.token_hex(8)
+        agora = datetime.now()
+        cur.execute(
+            "INSERT INTO conversations (id, username, titulo, criada_em, atualizada_em) VALUES (%s, %s, %s, %s, %s)",
+            (nova_id, session["username"], "Nova conversa", agora, agora)
+        )
+        conn.commit()
+        return jsonify({
+            "id": nova_id,
+            "titulo": "Nova conversa",
+            "criada_em": agora.isoformat(),
+            "atualizada_em": agora.isoformat(),
+            "mensagens": []
+        })
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"erro": f"Erro ao criar conversa: {str(e)}"}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/api/conversations/<conv_id>", methods=["GET"])
 @login_required
 def get_conversation(conv_id):
     """Retorna uma conversa completa com mensagens."""
-    conversations = load_conversations(session["username"])
-    for conv in conversations:
-        if conv["id"] == conv_id:
-            return jsonify(conv)
-    return jsonify({"erro": "Conversa não encontrada."}), 404
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            "SELECT id, titulo, criada_em, atualizada_em FROM conversations WHERE id = %s AND username = %s",
+            (conv_id, session["username"])
+        )
+        conv = cur.fetchone()
+        if not conv:
+            return jsonify({"erro": "Conversa não encontrada."}), 404
+
+        cur.execute(
+            "SELECT tipo, texto, timestamp FROM messages WHERE conversa_id = %s ORDER BY timestamp ASC",
+            (conv_id,)
+        )
+        mensagens = cur.fetchall()
+
+        return jsonify({
+            "id": conv["id"],
+            "titulo": conv["titulo"],
+            "criada_em": conv["criada_em"].isoformat() if conv["criada_em"] else "",
+            "atualizada_em": conv["atualizada_em"].isoformat() if conv["atualizada_em"] else "",
+            "mensagens": [{"tipo": m["tipo"], "texto": m["texto"], "timestamp": m["timestamp"].isoformat()} for m in mensagens]
+        })
+    finally:
+        cur.close()
+        conn.close()
 
 
 @app.route("/api/conversations/<conv_id>", methods=["DELETE"])
 @login_required
 def delete_conversation(conv_id):
     """Exclui uma conversa."""
-    conversations = load_conversations(session["username"])
-    conversations = [c for c in conversations if c["id"] != conv_id]
-    save_conversations(session["username"], conversations)
-    return jsonify({"sucesso": True})
+    conn = get_db()
+    cur = conn.cursor()
+    try:
+        cur.execute("DELETE FROM conversations WHERE id = %s AND username = %s", (conv_id, session["username"]))
+        conn.commit()
+        return jsonify({"sucesso": True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"erro": f"Erro ao excluir: {str(e)}"}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 # --- Rota principal do chat ---
@@ -371,65 +446,89 @@ def chat():
     if not conv_id:
         return jsonify({"erro": "ID da conversa não informado."}), 400
 
-    # Carregar conversa
-    conversations = load_conversations(session["username"])
-    conversa = None
-    for conv in conversations:
-        if conv["id"] == conv_id:
-            conversa = conv
-            break
-
-    if not conversa:
-        return jsonify({"erro": "Conversa não encontrada."}), 404
-
-    # Montar histórico para contexto
-    historico = []
-    for msg in conversa["mensagens"]:
-        historico.append({
-            "role": "user" if msg["tipo"] == "user" else "assistant",
-            "content": msg["texto"]
-        })
+    conn = get_db()
+    cur = conn.cursor()
 
     try:
+        # Verificar se a conversa existe e pertence ao usuário
+        cur.execute(
+            "SELECT id, titulo FROM conversations WHERE id = %s AND username = %s",
+            (conv_id, session["username"])
+        )
+        conversa = cur.fetchone()
+        if not conversa:
+            return jsonify({"erro": "Conversa não encontrada."}), 404
+
+        # Carregar histórico para contexto
+        cur.execute(
+            "SELECT tipo, texto FROM messages WHERE conversa_id = %s ORDER BY timestamp ASC",
+            (conv_id,)
+        )
+        msgs = cur.fetchall()
+        historico = []
+        for msg in msgs:
+            historico.append({
+                "role": "user" if msg["tipo"] == "user" else "assistant",
+                "content": msg["texto"]
+            })
+
+        # Processar a pergunta
         resposta = processar_pergunta(pergunta, historico)
 
-        # Salvar mensagens na conversa
-        agora = datetime.now().isoformat()
-        conversa["mensagens"].append({
-            "tipo": "user",
-            "texto": pergunta,
-            "timestamp": agora
-        })
-        conversa["mensagens"].append({
-            "tipo": "agent",
-            "texto": resposta,
-            "timestamp": agora
-        })
-        conversa["atualizada_em"] = agora
+        # Salvar mensagens no banco
+        agora = datetime.now()
+        cur.execute(
+            "INSERT INTO messages (conversa_id, tipo, texto, timestamp) VALUES (%s, %s, %s, %s)",
+            (conv_id, "user", pergunta, agora)
+        )
+        cur.execute(
+            "INSERT INTO messages (conversa_id, tipo, texto, timestamp) VALUES (%s, %s, %s, %s)",
+            (conv_id, "agent", resposta, agora)
+        )
 
         # Atualizar título se for a primeira mensagem
-        if len(conversa["mensagens"]) == 2:
-            # Usar as primeiras palavras da pergunta como título
+        cur.execute("SELECT COUNT(*) as cnt FROM messages WHERE conversa_id = %s", (conv_id,))
+        count = cur.fetchone()["cnt"]
+        if count <= 2:
             titulo = pergunta[:50]
             if len(pergunta) > 50:
                 titulo += "..."
-            conversa["titulo"] = titulo
+            cur.execute(
+                "UPDATE conversations SET titulo = %s, atualizada_em = %s WHERE id = %s",
+                (titulo, agora, conv_id)
+            )
+        else:
+            cur.execute(
+                "UPDATE conversations SET atualizada_em = %s WHERE id = %s",
+                (agora, conv_id)
+            )
 
-        save_conversations(session["username"], conversations)
-
+        conn.commit()
         return jsonify({"resposta": resposta})
 
     except Exception as e:
+        conn.rollback()
         return jsonify({"erro": f"Ocorreu um erro: {str(e)}"}), 500
+    finally:
+        cur.close()
+        conn.close()
 
 
 # ============================================================
 # INICIALIZAÇÃO
 # ============================================================
 
+# Criar tabelas ao iniciar
+if DATABASE_URL:
+    try:
+        init_db()
+        print("Banco de dados inicializado com sucesso!")
+    except Exception as e:
+        print(f"Erro ao inicializar banco: {e}")
+
 if __name__ == "__main__":
     print("=" * 60)
-    print("  AGENTE IA DO PROFESSOR - Versão 2.0")
+    print("  AGENTE IA DO PROFESSOR - Versão 2.1")
     print("  Acesse: http://localhost:5000")
     print("=" * 60)
     port = int(os.environ.get("PORT", 5000))
